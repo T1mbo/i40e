@@ -10,6 +10,10 @@
 #include "i40e_prototype.h"
 #include "i40e_txrx_common.h"
 
+#if defined(CONFIG_NETMAP) || defined (CONFIG_NETMAP_MODULE)
+#include <i40e_netmap_linux.h>
+#endif /* DEV_NETMAP */
+
 static inline __le64 build_ctob(u32 td_cmd, u32 td_offset, unsigned int size,
 				u32 td_tag)
 {
@@ -935,6 +939,11 @@ static bool i40e_clean_tx_irq(struct i40e_vsi *vsi,
 	struct i40e_tx_desc *tx_desc;
 	unsigned int total_bytes = 0, total_packets = 0;
 	unsigned int budget = vsi->work_limit;
+
+#ifdef DEV_NETMAP
+	if (tx_ring->netdev && netmap_tx_irq(tx_ring->netdev, tx_ring->queue_index) != NM_IRQ_PASS)
+		return true;
+#endif /* DEV_NETMAP */
 
 	tx_buf = &tx_ring->tx_bi[i];
 	tx_desc = I40E_TX_DESC(tx_ring, i);
@@ -2771,7 +2780,17 @@ static int i40e_clean_rx_irq(struct i40e_ring *rx_ring, int budget)
 	struct xdp_buff xdp;
 	u16 tpid;
 
+#ifdef DEV_NETMAP
+	if (rx_ring->netdev) {
+		int dummy, nm_irq;
+		nm_irq = netmap_rx_irq(rx_ring->netdev, rx_ring->queue_index, &dummy);
+		if (nm_irq != NM_IRQ_PASS) {
+			return (nm_irq == NM_IRQ_COMPLETED) ? 1 : budget;
+		}
+	}
+#endif /* DEV_NETMAP */
 #ifdef HAVE_XDP_BUFF_FRAME_SZ
+
 #if (PAGE_SIZE < 8192)
 	xdp.frame_sz = i40e_rx_frame_truesize(rx_ring, 0);
 #endif

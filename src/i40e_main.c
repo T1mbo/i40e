@@ -152,6 +152,11 @@ bool i40e_is_l4mode_enabled(void)
 	return l4mode > L4_MODE_DISABLED;
 }
 
+#if defined(CONFIG_NETMAP) || defined(CONFIG_NETMAP_MODULE)
+#define NETMAP_I40E_MAIN
+#include <i40e_netmap_linux.h>
+#endif
+
 /**
  * i40e_get_lump - find a lump of free generic resource
  * @pf: board private structure
@@ -3989,6 +3994,10 @@ static int i40e_configure_tx_ring(struct i40e_ring *ring)
 	/* cache tail off for easier writes later */
 	ring->tail = hw->hw_addr + I40E_QTX_TAIL(pf_q);
 
+#ifdef DEV_NETMAP
+	i40e_netmap_configure_tx_ring(ring);
+#endif /* DEV_NETMAP */
+
 	return 0;
 }
 
@@ -4042,6 +4051,10 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	/* set the prefena field to 1 because the manual says to */
 	rx_ctx.prefena = 1;
 
+#ifdef DEV_NETMAP
+	i40e_netmap_preconfigure_rx_ring(ring, &rx_ctx);
+#endif /* DEV_NETMAP */
+
 	/* clear the context in the HMC */
 	err = i40e_clear_lan_rx_queue_context(hw, pf_q);
 	if (err) {
@@ -4069,6 +4082,11 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	/* cache tail for quicker writes, and clear the reg before use */
 	ring->tail = hw->hw_addr + I40E_QRX_TAIL(pf_q);
 	writel(0, ring->tail);
+
+#ifdef DEV_NETMAP
+	if (i40e_netmap_configure_rx_ring(ring))
+		return 0;
+#endif /* DEV_NETMAP */
 
 	i40e_alloc_rx_buffers(ring, I40E_DESC_UNUSED(ring));
 
@@ -15228,6 +15246,12 @@ int i40e_vsi_release(struct i40e_vsi *vsi)
 	}
 
 	set_bit(__I40E_VSI_RELEASING, vsi->state);
+
+#ifdef DEV_NETMAP
+	if (vsi->netdev_registered)
+		netmap_detach(vsi->netdev);
+#endif
+
 	uplink_seid = vsi->uplink_seid;
 	if (vsi->type != I40E_VSI_SRIOV) {
 		if (vsi->netdev_registered) {
@@ -15600,6 +15624,12 @@ struct i40e_vsi *i40e_vsi_setup(struct i40e_pf *pf, u8 type,
 	    (vsi->type == I40E_VSI_VMDQ2)) {
 		ret = i40e_vsi_config_rss(vsi);
 	}
+
+#ifdef DEV_NETMAP
+	if (vsi->netdev_registered)
+		i40e_netmap_attach(vsi);
+#endif
+
 	return vsi;
 
 err_rings:

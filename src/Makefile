@@ -10,9 +10,9 @@ ifneq ($(KERNELRELEASE),)
 ccflags-y += -I$(src)
 subdir-ccflags-y += -I$(src)
 
-obj-$(CONFIG_I40E) += i40e.o
+obj-$(CONFIG_I40E) += i40e$(NETMAP_DRIVER_SUFFIX).o
 
-i40e-y := i40e_main.o \
+i40e$(NETMAP_DRIVER_SUFFIX)-y := i40e_main.o \
 	i40e_ethtool.o \
 	i40e_adminq.o \
 	i40e_common.o \
@@ -28,14 +28,14 @@ i40e-y := i40e_main.o \
 	i40e_client.o \
 	i40e_virtchnl_pf.o
 
-i40e-$(CONFIG_DCB) += i40e_dcb.o i40e_dcb_nl.o
-i40e-y += kcompat.o
-i40e-y += kcompat_vfd.o
+i40e$(NETMAP_DRIVER_SUFFIX)-$(CONFIG_DCB) += i40e_dcb.o i40e_dcb_nl.o
+i40e$(NETMAP_DRIVER_SUFFIX)-y += kcompat.o
+i40e$(NETMAP_DRIVER_SUFFIX)-y += kcompat_vfd.o
 
 else	# ifneq($(KERNELRELEASE),)
 # normal makefile
 
-DRIVER := i40e
+DRIVER := i40e$(NETMAP_DRIVER_SUFFIX)
 
 # If the user just wants to print the help output, don't include common.mk or
 # perform any other checks. This ensures that running "make help" will always
@@ -89,8 +89,11 @@ ccc: clean
 	@+$(call kernelbuild,modules,coccicheck MODE=report)
 
 # Build manfiles
-manfile:
+manfile: ../${DRIVER}.${MANSECTION}
 	@gzip -c ../${DRIVER}.${MANSECTION} > ${DRIVER}.${MANSECTION}.gz
+
+../${DRIVER}.${MANSECTION}:
+	touch $@
 
 # Clean the module subdirectories
 clean:
